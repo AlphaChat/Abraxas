@@ -1,0 +1,4 @@
+[submodule "AlphaChat"]
+	path = AlphaChat
+	url = ../ConfigPydle.git
+	branch = master
