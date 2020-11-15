@@ -234,16 +234,22 @@ class Client(configpydle.Client):
 				droneblinfo[id] = ipaddr
 
 				if 'comment' not in result.attrib:
+					# Updating a listing that wasn't submitted by us; don't double the event
+					# count on the next query
+					ipaddrinfo[ipaddr]['dronebl-count-restored'] = True
 					continue
 
 				# Now we have an up-to-date listing comment
 				ipaddrinfo[ipaddr]['dronebl-comment'] = result.attrib['comment']
 				matches = dronebl_comment.fullmatch(result.attrib['comment'])
 				if not matches:
+					# Updating a listing that wasn't submitted by us; don't double the event
+					# count on the next query
+					ipaddrinfo[ipaddr]['dronebl-count-restored'] = True
 					continue
 
-				# If the comment is structured like a comment we would have added, then this is a
-				# submission from before this script was (re)started. So, use the comment to back-
+				# If the comment is structured like a comment we would have added, then this may be
+				# a submission from before this script was (re)started. So, use the comment to back-
 				# date our first-seen timestamp, and add the previous event count to our current
 				# one (but only if we haven't seen a count before).
 				try:
