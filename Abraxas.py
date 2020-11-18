@@ -318,7 +318,7 @@ class Client(configpydle.Client):
 			await self.report_elem_list('DroneBL: Added', added, ipaddrinfo, 'event-count')
 
 		except Exception as e:
-			return await self.log_message(f'{func_name}: Exception: {str(e)}')
+			return await self.log_message(f'{func_name}: Exception {type(e)}: {str(e)}')
 
 
 
