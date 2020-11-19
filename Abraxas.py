@@ -33,16 +33,18 @@ import signal
 import sys
 import xml.etree.ElementTree as ET
 
-
-
-sshd_message        = re.compile('^\x03[0-9]{1,2}\[sshd\] Unable to negotiate with (.+): no matching (key exchange method|host key type) found \[preauth\]\x03$')
-dronebl_comment     = re.compile('^SSH server abuse\. First seen (.+)\. Last seen (.+)\. Observed ([0-9]+) times\.$')
-
 class Client(configpydle.Client):
 
 	def __init__(self, *args, **kwargs):
 
 		super().__init__(*args, **kwargs)
+
+		self.re_dronebl_comment = re.compile('^SSH server abuse\. First seen (.+)\. Last seen (.+)\. ' \
+		                                     'Observed ([0-9]+) times\.$')
+
+		self.re_sshd_message    = re.compile('^\x03[0-9]{1,2}\[sshd\] Unable to negotiate with (.+): ' \
+		                                     'no matching (key exchange method|host key type) found ' \
+		                                     '\[preauth\]\x03$')
 
 		headers = { 'Content-Type': 'text/xml' }
 		timeout = aiohttp.ClientTimeout(total=60)
@@ -172,7 +174,7 @@ class Client(configpydle.Client):
 		if not source.startswith('irccat-'):
 			return
 
-		matches = sshd_message.fullmatch(message)
+		matches = self.re_sshd_message.fullmatch(message)
 		if not matches:
 			return
 
@@ -271,7 +273,7 @@ class Client(configpydle.Client):
 
 				# Now we have an up-to-date listing comment
 				self.ipaddrinfo[ipaddr]['dronebl-comment'] = result.attrib['comment']
-				matches = dronebl_comment.fullmatch(result.attrib['comment'])
+				matches = self.re_dronebl_comment.fullmatch(result.attrib['comment'])
 				if not matches:
 					# Updating a listing that wasn't submitted by us; don't double the event
 					# count on the next query
