@@ -42,27 +42,27 @@ ipaddrinfo          = {}
 
 class Client(configpydle.Client):
 
-	def __init__(self, *args, eventloop=None, **kwargs):
+	def __init__(self, *args, **kwargs):
 
-		super().__init__(*args, eventloop=eventloop, **kwargs)
+		super().__init__(*args, **kwargs)
 
-		_http_headers = {
-			'Content-Type': 'text/xml'
-		}
+		headers = { 'Content-Type': 'text/xml' }
+		timeout = aiohttp.ClientTimeout(total=60)
+		self.http_session = aiohttp.ClientSession(headers=headers, timeout=timeout)
 
-		_timeout = aiohttp.ClientTimeout(total=60)
-
-		self.http_session = aiohttp.ClientSession(headers=_http_headers, timeout=_timeout)
+		self.ev_tasks = None
 		self.submission_lock = asyncio.Lock()
+
+		handler = lambda self=self : self.eventloop.create_task(self.sigterm_handler())
+		self.eventloop.add_signal_handler(signal.SIGTERM, handler)
 
 
 
 	async def check_membership(self):
 
-		while self.connected:
+		while await asyncio.sleep(0.1, result=True):
 
-			await asyncio.sleep(0.1)
-			if not self.autoperform_done:
+			if not self.connected or not self.autoperform_done:
 				continue
 
 			if not self.in_channel(self.phcfg['log_channel']):
@@ -72,24 +72,19 @@ class Client(configpydle.Client):
 
 	async def submit_addresses(self):
 
-		while self.connected:
+		while await asyncio.sleep(0.1, result=True):
 
-			await asyncio.sleep(0.1)
-			if not self.autoperform_done:
+			if not self.connected or not self.autoperform_done:
 				continue
 
 			current_ts = int(datetime.now(tz=timezone.utc).timestamp())
 			dronebl_interval = self.phcfg['dronebl_interval']
 			await asyncio.sleep(dronebl_interval - (current_ts % dronebl_interval))
-			while not self.in_channel(self.phcfg['log_channel']):
+			while self.connected and not self.in_channel(self.phcfg['log_channel']):
 				# The check_membership() task above will take care of this
 				await asyncio.sleep(0.1)
 
 			async with self.submission_lock:
-				# The signal handler below could acquire this lock first & disconnect us,
-				# so check if we're still connected before doing anything. Otherwise, we'll
-				# be performing another pointless DroneBL query immediately after it, while
-				# we're disconnected and thus can't even report on its outcome anyway
 				if self.connected:
 					await self.do_submit_addresses()
 
@@ -97,13 +92,38 @@ class Client(configpydle.Client):
 
 	async def sigterm_handler(self):
 
-		await self.log_message('Received SIGTERM; performing final submission & disconnecting')
-
-		# Make sure we disconnect while holding the lock, to avoid interacting badly with the
-		# submit_addresses() task above
+		# Make sure we do all of this while holding the submission lock, to avoid interacting badly with
+		# the submit_addresses() task above. It's necessary to sleep for a short while after closing the
+		# HTTP session so that TLS close_notify alerts get processed and connections get closed cleanly.
+		# Note we don't care whether we're connected to the IRC server or not; this is to guard against
+		# data loss (events that are observed but not submitted).
 		async with self.submission_lock:
+
+			await self.cleanup_tasks()
+			await self.log_message('Received SIGTERM; performing final submission & disconnecting')
 			await self.do_submit_addresses()
+			await self.http_session.close()
+			await asyncio.sleep(1)
 			await self.quit('Received SIGTERM')
+
+			self.eventloop.remove_signal_handler(signal.SIGTERM)
+			self.eventloop.stop()
+
+
+
+	async def cleanup_tasks(self):
+
+		if self.ev_tasks is None:
+			return
+
+		for task in self.ev_tasks:
+			try:
+				task.cancel()
+				await task
+			except:
+				pass
+
+		self.ev_tasks = None
 
 
 
@@ -111,8 +131,19 @@ class Client(configpydle.Client):
 
 		await super().on_connect()
 
-		self.eventloop.add_signal_handler(signal.SIGTERM,
-		                                  lambda self=self: asyncio.create_task(self.sigterm_handler()))
+		if self.ev_tasks is None:
+			self.ev_tasks = [
+				self.eventloop.create_task(self.check_membership()),
+				self.eventloop.create_task(self.submit_addresses())
+			]
+
+
+
+	async def on_disconnect(self, expected):
+
+		await super().on_disconnect(expected)
+
+		await self.cleanup_tasks()
 
 
 
@@ -433,7 +464,7 @@ class Client(configpydle.Client):
 
 
 
-async def main():
+def main():
 
 	required_config_keys = [
 		'blacklist_count',
@@ -443,14 +474,10 @@ async def main():
 		'log_channel',
 	]
 
-	eventloop = asyncio.get_running_loop()
-	client = Client(path='client.cfg', eventloop=eventloop, required_config_keys=required_config_keys)
-
-	await client.connect()
-	await asyncio.gather(client.check_membership(), client.submit_addresses(), return_exceptions=True)
-
+	client = Client(path='client.cfg', required_config_keys=required_config_keys)
+	client.run()
 
 
 if __name__ == '__main__':
-	asyncio.run(main())
+	main()
 	sys.exit(1)
