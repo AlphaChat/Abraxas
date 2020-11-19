@@ -38,8 +38,6 @@ import xml.etree.ElementTree as ET
 sshd_message        = re.compile('^\x03[0-9]{1,2}\[sshd\] Unable to negotiate with (.+): no matching (key exchange method|host key type) found \[preauth\]\x03$')
 dronebl_comment     = re.compile('^SSH server abuse\. First seen (.+)\. Last seen (.+)\. Observed ([0-9]+) times\.$')
 
-ipaddrinfo          = {}
-
 class Client(configpydle.Client):
 
 	def __init__(self, *args, **kwargs):
@@ -51,6 +49,7 @@ class Client(configpydle.Client):
 		self.http_session = aiohttp.ClientSession(headers=headers, timeout=timeout)
 
 		self.ev_tasks = None
+		self.ipaddrinfo = {}
 		self.submission_lock = asyncio.Lock()
 
 		handler = lambda self=self : self.eventloop.create_task(self.sigterm_handler())
@@ -189,16 +188,16 @@ class Client(configpydle.Client):
 
 		current_ts = datetime.now(tz=timezone.utc).isoformat(timespec='seconds')
 
-		if ipaddr not in ipaddrinfo:
-			ipaddrinfo[ipaddr] = {
+		if ipaddr not in self.ipaddrinfo:
+			self.ipaddrinfo[ipaddr] = {
 				'first-seen':   current_ts,
 				'last-seen':    current_ts,
 				'event-count':  1,
 			}
 			return
 
-		ipaddrinfo[ipaddr]['event-count'] += 1
-		ipaddrinfo[ipaddr]['last-seen'] = current_ts
+		self.ipaddrinfo[ipaddr]['event-count'] += 1
+		self.ipaddrinfo[ipaddr]['last-seen'] = current_ts
 
 
 
@@ -207,16 +206,16 @@ class Client(configpydle.Client):
 		func_name = 'do_submit_addresses()'
 
 		# If no abuse events have been detected at all, there's no point running
-		if not len(ipaddrinfo):
+		if not len(self.ipaddrinfo):
 			return
 
 		try:
 			droneblinfo = {}
 
 			# Remove DroneBL metadata from currently-known addresses
-			for ipaddr in ipaddrinfo:
-				ipaddrinfo[ipaddr].pop('dronebl-id', None)
-				ipaddrinfo[ipaddr].pop('dronebl-comment', None)
+			for ipaddr in self.ipaddrinfo:
+				self.ipaddrinfo[ipaddr].pop('dronebl-id', None)
+				self.ipaddrinfo[ipaddr].pop('dronebl-comment', None)
 
 			# Submit an XMLRPC request asking for the listing status of all currently-known addresses.
 			# We parse this to reacquire DroneBL metadata, to decide which listings to update instead
@@ -248,7 +247,7 @@ class Client(configpydle.Client):
 					                       f'{result.attrib["ip"]} ({str(e)})')
 					continue
 
-				if ipaddr not in ipaddrinfo:
+				if ipaddr not in self.ipaddrinfo:
 					await self.log_message(f'DroneBL: Responded with {ipaddr}, ' \
 					                       f'which was not queried for!')
 					continue
@@ -261,22 +260,22 @@ class Client(configpydle.Client):
 					continue
 
 				# Now we have an up-to-date listing ID for a subsequent <update ...> request
-				ipaddrinfo[ipaddr]['dronebl-id'] = id
+				self.ipaddrinfo[ipaddr]['dronebl-id'] = id
 				droneblinfo[id] = ipaddr
 
 				if 'comment' not in result.attrib:
 					# Updating a listing that wasn't submitted by us; don't double the event
 					# count on the next query
-					ipaddrinfo[ipaddr]['dronebl-count-restored'] = True
+					self.ipaddrinfo[ipaddr]['dronebl-count-restored'] = True
 					continue
 
 				# Now we have an up-to-date listing comment
-				ipaddrinfo[ipaddr]['dronebl-comment'] = result.attrib['comment']
+				self.ipaddrinfo[ipaddr]['dronebl-comment'] = result.attrib['comment']
 				matches = dronebl_comment.fullmatch(result.attrib['comment'])
 				if not matches:
 					# Updating a listing that wasn't submitted by us; don't double the event
 					# count on the next query
-					ipaddrinfo[ipaddr]['dronebl-count-restored'] = True
+					self.ipaddrinfo[ipaddr]['dronebl-count-restored'] = True
 					continue
 
 				# If the comment is structured like a comment we would have added, then this may be
@@ -285,11 +284,11 @@ class Client(configpydle.Client):
 				# one (but only if we haven't seen a count before).
 				try:
 					if datetime.fromisoformat(matches.group(1)):
-						ipaddrinfo[ipaddr]['first-seen'] = matches.group(1)
-					if 'dronebl-count-restored' not in ipaddrinfo[ipaddr]:
+						self.ipaddrinfo[ipaddr]['first-seen'] = matches.group(1)
+					if 'dronebl-count-restored' not in self.ipaddrinfo[ipaddr]:
 						count = int(matches.group(3))
-						ipaddrinfo[ipaddr]['event-count'] += count
-						ipaddrinfo[ipaddr]['dronebl-count-restored'] = True
+						self.ipaddrinfo[ipaddr]['event-count'] += count
+						self.ipaddrinfo[ipaddr]['dronebl-count-restored'] = True
 				except:
 					pass
 
@@ -333,7 +332,7 @@ class Client(configpydle.Client):
 
 					# DroneBL returns an incorrect 'id' attribute for an addition,
 					# use the 'ip' attribute instead
-					if ipaddr not in ipaddrinfo:
+					if ipaddr not in self.ipaddrinfo:
 						await self.log_message(f'DroneBL: Responded with {ipaddr}, ' \
 						                       f'which was not queried for!')
 						continue
@@ -343,10 +342,10 @@ class Client(configpydle.Client):
 					# Prevent the submission code above importing the event count for newly-
 					# added entries. We don't want to effectively double the event count on
 					# the next initial query.
-					ipaddrinfo[ipaddr]['dronebl-count-restored'] = True
+					self.ipaddrinfo[ipaddr]['dronebl-count-restored'] = True
 
-			await self.report_elem_list('DroneBL: Updated', updated, ipaddrinfo, 'event-count')
-			await self.report_elem_list('DroneBL: Added', added, ipaddrinfo, 'event-count')
+			await self.report_elem_list('DroneBL: Updated', updated, self.ipaddrinfo, 'event-count')
+			await self.report_elem_list('DroneBL: Added', added, self.ipaddrinfo, 'event-count')
 
 		except Exception as e:
 			return await self.log_message(f'{func_name}: Exception {type(e)}: {str(e)}')
@@ -363,7 +362,7 @@ class Client(configpydle.Client):
 
 		request = ET.Element('request', { 'key': self.phcfg['dronebl_rpckey'] })
 
-		for ipaddr in ipaddrinfo:
+		for ipaddr in self.ipaddrinfo:
 			ET.SubElement(request, 'lookup', { 'ip': ipaddr, 'type': '13', 'listed': '1', 'own': '1' })
 
 		return ET.tostring(request, encoding='utf-8', xml_declaration=True)
@@ -375,20 +374,20 @@ class Client(configpydle.Client):
 		any_entries = False
 		request = ET.Element('request', { 'key': self.phcfg['dronebl_rpckey'] })
 
-		for ipaddr in ipaddrinfo:
-			if ipaddrinfo[ipaddr]['event-count'] < self.phcfg['blacklist_count']:
+		for ipaddr in self.ipaddrinfo:
+			if self.ipaddrinfo[ipaddr]['event-count'] < self.phcfg['blacklist_count']:
 				continue
 
 			comment = f'SSH server abuse. ' \
-			          f'First seen {ipaddrinfo[ipaddr]["first-seen"]}. ' \
-			          f'Last seen {ipaddrinfo[ipaddr]["last-seen"]}. ' \
-			          f'Observed {ipaddrinfo[ipaddr]["event-count"]} times.'
+			          f'First seen {self.ipaddrinfo[ipaddr]["first-seen"]}. ' \
+			          f'Last seen {self.ipaddrinfo[ipaddr]["last-seen"]}. ' \
+			          f'Observed {self.ipaddrinfo[ipaddr]["event-count"]} times.'
 
-			if 'dronebl-id' not in ipaddrinfo[ipaddr]:
+			if 'dronebl-id' not in self.ipaddrinfo[ipaddr]:
 				ET.SubElement(request, 'add', { 'ip': ipaddr, 'type': '13', 'comment': comment })
 				any_entries = True
-			elif comment != ipaddrinfo[ipaddr]['dronebl-comment']:
-				id = ipaddrinfo[ipaddr]['dronebl-id']
+			elif comment != self.ipaddrinfo[ipaddr]['dronebl-comment']:
+				id = self.ipaddrinfo[ipaddr]['dronebl-id']
 				ET.SubElement(request, 'update', { 'id': id, 'comment': comment })
 				any_entries = True
 
@@ -419,14 +418,14 @@ class Client(configpydle.Client):
 
 	async def report_ip_stats(self):
 
-		for ipaddr in sorted(ipaddrinfo):
+		for ipaddr in sorted(self.ipaddrinfo):
 			ipstat = f'{ipaddr} -> {{ '
 			for key in ('first-seen', 'last-seen', 'event-count', 'dronebl-id'):
-				if key in ipaddrinfo[ipaddr]:
-					ipstat += f'{key}: {ipaddrinfo[ipaddr][key]}, '
+				if key in self.ipaddrinfo[ipaddr]:
+					ipstat += f'{key}: {self.ipaddrinfo[ipaddr][key]}, '
 			await self.log_message(f'{ipstat[:-2]} }}')
 
-		await self.log_message(f'Total entries: {len(ipaddrinfo)}')
+		await self.log_message(f'Total entries: {len(self.ipaddrinfo)}')
 
 
 
