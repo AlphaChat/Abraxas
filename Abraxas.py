@@ -46,13 +46,10 @@ class Client(configpydle.Client):
 		                                     'no matching (key exchange method|host key type) found ' \
 		                                     '\[preauth\]\x03$')
 
-		headers = { 'Content-Type': 'text/xml' }
-		timeout = aiohttp.ClientTimeout(total=60)
-		self.http_session = aiohttp.ClientSession(headers=headers, timeout=timeout)
-
-		self.ev_tasks = None
-		self.ipaddrinfo = {}
-		self.submission_lock = asyncio.Lock()
+		self.ev_tasks           = None
+		self.http_session       = None
+		self.ipaddrinfo         = {}
+		self.submission_lock    = asyncio.Lock()
 
 		handler = lambda self=self : self.eventloop.create_task(self.sigterm_handler())
 		self.eventloop.add_signal_handler(signal.SIGTERM, handler)
@@ -103,8 +100,12 @@ class Client(configpydle.Client):
 			await self.cleanup_tasks()
 			await self.log_message('Received SIGTERM; performing final submission & disconnecting')
 			await self.do_submit_addresses()
-			await self.http_session.close()
-			await asyncio.sleep(1)
+
+			if self.http_session is not None:
+				await self.http_session.close()
+				await asyncio.sleep(1)
+				self.http_session = None
+
 			await self.quit('Received SIGTERM')
 
 			self.eventloop.remove_signal_handler(signal.SIGTERM)
@@ -213,6 +214,11 @@ class Client(configpydle.Client):
 
 		try:
 			droneblinfo = {}
+
+			if self.http_session is None:
+				headers = { 'Content-Type': 'text/xml' }
+				timeout = aiohttp.ClientTimeout(total=60)
+				self.http_session = aiohttp.ClientSession(headers=headers, timeout=timeout)
 
 			# Remove DroneBL metadata from currently-known addresses
 			for ipaddr in self.ipaddrinfo:
