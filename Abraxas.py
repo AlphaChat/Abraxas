@@ -197,16 +197,16 @@ class Client(configpydle.Client):
 
 		current_ts = datetime.now(tz=timezone.utc).isoformat(timespec='seconds')
 
-		if ipaddr not in self.ipaddrinfo:
-			self.ipaddrinfo[ipaddr] = {
-				'first-seen':   current_ts,
-				'last-seen':    current_ts,
-				'event-count':  1,
-			}
-			return
-
-		self.ipaddrinfo[ipaddr]['event-count'] += 1
-		self.ipaddrinfo[ipaddr]['last-seen'] = current_ts
+		async with self.submission_lock:
+			if ipaddr in self.ipaddrinfo:
+				self.ipaddrinfo[ipaddr]['last-seen'] = current_ts
+				self.ipaddrinfo[ipaddr]['event-count'] += 1
+			else:
+				self.ipaddrinfo[ipaddr] = {
+					'first-seen':   current_ts,
+					'last-seen':    current_ts,
+					'event-count':  1,
+				}
 
 
 
