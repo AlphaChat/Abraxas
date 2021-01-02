@@ -473,16 +473,22 @@ class Client(configpydle.Client):
 
 def main():
 
+	default_config_keys = {
+		'blacklist_count':      '10',
+		'dronebl_endpoint':     'https://dronebl.org/rpc2',
+		'dronebl_interval':	'3600',
+	}
+
 	required_config_keys = [
-		'blacklist_count',
-		'dronebl_endpoint',
-		'dronebl_interval',
 		'dronebl_rpckey',
 		'log_channel',
 	]
 
-	client = Client(path='client.cfg', required_config_keys=required_config_keys)
+	client = Client(path='client.cfg',
+	                default_config_keys=default_config_keys,
+	                required_config_keys=required_config_keys)
 	client.run()
+
 
 
 if __name__ == '__main__':
