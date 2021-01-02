@@ -175,9 +175,6 @@ class Client(configpydle.Client):
 		if not self.is_same_channel(target, self.phcfg['log_channel']):
 			return await self.part(target)
 
-		if message == '!ipstats':
-			return await self.report_ip_stats()
-
 		if not source.startswith('irccat-'):
 			return
 
@@ -351,13 +348,13 @@ class Client(configpydle.Client):
 
 					added.append(ipaddr)
 
-					# Prevent the submission code above importing the event count for newly-
-					# added entries. We don't want to effectively double the event count on
-					# the next initial query.
-					self.ipaddrinfo[ipaddr]['dronebl-count-restored'] = True
-
 			await self.report_elem_list('DroneBL: Updated', updated, self.ipaddrinfo, 'event-count')
 			await self.report_elem_list('DroneBL: Added', added, self.ipaddrinfo, 'event-count')
+
+			for ipaddr in added:
+				del self.ipaddrinfo[ipaddr]
+			for ipaddr in updated:
+				del self.ipaddrinfo[ipaddr]
 
 		except Exception as e:
 			return await self.log_message(f'{func_name}: Exception {type(e)}: {str(e)}')
@@ -425,19 +422,6 @@ class Client(configpydle.Client):
 			message += addtext
 		if message:
 			await self.log_message(f'{prefix}: {message[:-2]}')
-
-
-
-	async def report_ip_stats(self):
-
-		for ipaddr in sorted(self.ipaddrinfo):
-			ipstat = f'{ipaddr} -> {{ '
-			for key in ('first-seen', 'last-seen', 'event-count', 'dronebl-id'):
-				if key in self.ipaddrinfo[ipaddr]:
-					ipstat += f'{key}: {self.ipaddrinfo[ipaddr][key]}, '
-			await self.log_message(f'{ipstat[:-2]} }}')
-
-		await self.log_message(f'Total entries: {len(self.ipaddrinfo)}')
 
 
 
