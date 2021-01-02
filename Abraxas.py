@@ -39,6 +39,12 @@ class Client(configpydle.Client):
 
 		super().__init__(*args, **kwargs)
 
+		try:
+			if int(self.phcfg['dronebl_timeout']) < 60:
+				raise Exception('The dronebl_timeout option is less than 60')
+		except:
+			raise ValueError('The dronebl_timeout option must be an integer greater than or equal to 60')
+
 		self.re_dronebl_comment = re.compile('^SSH server abuse\. First seen (.+)\. Last seen (.+)\. ' \
 		                                     'Observed ([0-9]+) times\.$')
 
@@ -217,7 +223,7 @@ class Client(configpydle.Client):
 
 			if self.http_session is None:
 				headers = { 'Content-Type': 'text/xml' }
-				timeout = aiohttp.ClientTimeout(total=60)
+				timeout = aiohttp.ClientTimeout(total=self.phcfg['dronebl_timeout'])
 				self.http_session = aiohttp.ClientSession(headers=headers, timeout=timeout)
 
 			# Remove DroneBL metadata from currently-known addresses
@@ -476,7 +482,8 @@ def main():
 	default_config_keys = {
 		'blacklist_count':      '10',
 		'dronebl_endpoint':     'https://dronebl.org/rpc2',
-		'dronebl_interval':	'3600',
+		'dronebl_interval':     '3600',
+		'dronebl_timeout':      '120',
 	}
 
 	required_config_keys = [
