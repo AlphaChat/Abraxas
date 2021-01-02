@@ -219,7 +219,7 @@ class Client(configpydle.Client):
 			return
 
 		try:
-			droneblinfo = {}
+			dronebl_id_to_ip = {}
 
 			if self.http_session is None:
 				headers = { 'Content-Type': 'text/xml' }
@@ -267,15 +267,15 @@ class Client(configpydle.Client):
 					continue
 
 				# Guard against multiple listings with the same ID (should never happen ...)
-				if id in droneblinfo:
-					ipaddr_dup = droneblinfo[id]
+				if id in dronebl_id_to_ip:
+					ipaddr_dup = dronebl_id_to_ip[id]
 					await self.log_message(f'DroneBL: Received listing with duplicate ' \
 					                       f'ID {id} ({ipaddr}, {ipaddr_dup})')
 					continue
 
 				# Now we have an up-to-date listing ID for a subsequent <update ...> request
 				self.ipaddrinfo[ipaddr]['dronebl-id'] = id
-				droneblinfo[id] = ipaddr
+				dronebl_id_to_ip[id] = ipaddr
 
 				if 'comment' not in result.attrib:
 					# Updating a listing that wasn't submitted by us; don't double the event
@@ -329,7 +329,7 @@ class Client(configpydle.Client):
 
 				if 'ip' not in success.attrib:
 					# DroneBL does not return an 'ip' attribute for a listing update
-					if id not in droneblinfo:
+					if id not in dronebl_id_to_ip:
 						await self.log_message(f'DroneBL: Received update success with ' \
 						                       f'unknown listing ID {id}')
 						continue
@@ -338,14 +338,12 @@ class Client(configpydle.Client):
 						                       f'duplicated listing ID {id}')
 						continue
 
-					updated.append(droneblinfo[id])
+					updated.append(dronebl_id_to_ip[id])
 					seen_ids[id] = True
 
 				else:
 					ipaddr = success.attrib['ip']
 
-					# DroneBL returns an incorrect 'id' attribute for an addition,
-					# use the 'ip' attribute instead
 					if ipaddr not in self.ipaddrinfo:
 						await self.log_message(f'DroneBL: Responded with {ipaddr}, ' \
 						                       f'which was not queried for!')
