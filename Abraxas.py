@@ -348,8 +348,12 @@ class Client(configpydle.Client):
 
 					added.append(ipaddr)
 
-			await self.report_elem_list('DroneBL: Updated', updated, self.ipaddrinfo, 'event-count')
-			await self.report_elem_list('DroneBL: Added', added, self.ipaddrinfo, 'event-count')
+			quiet = False
+			if 'quiet' in self.phcfg:
+				quiet = self.phcfg['quiet']
+			if not quiet:
+				await self.report_elem_list('DroneBL: Updated', updated, self.ipaddrinfo, 'event-count')
+				await self.report_elem_list('DroneBL: Added', added, self.ipaddrinfo, 'event-count')
 
 			for ipaddr in added:
 				del self.ipaddrinfo[ipaddr]
