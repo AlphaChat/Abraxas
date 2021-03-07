@@ -188,6 +188,8 @@ class Client(configpydle.Client):
 			ipobj = ip_address(ipaddr)
 			if ipobj.version != 4 and ipobj.version != 6:
 				raise ValueError('Unknown IP version')
+			if not ipobj.is_global:
+				return
 			ipaddr = ipobj.compressed
 		except ValueError as e:
 			return await self.log_message(f'{func_name}: could not parse "{ipaddr}": {str(e)}')
