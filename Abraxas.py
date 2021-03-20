@@ -24,10 +24,10 @@
 
 from AlphaChat import configpydle
 from datetime import datetime, timezone
-from ipaddress import ip_address
 
 import aiohttp
 import asyncio
+import ipaddress
 import re
 import signal
 import sys
@@ -53,9 +53,18 @@ class Client(configpydle.Client):
 		                                     '\[preauth\]\x03$')
 
 		self.ev_tasks           = None
+		self.exempt_addresses   = []
 		self.http_session       = None
 		self.ipaddrinfo         = {}
 		self.submission_lock    = asyncio.Lock()
+
+		if self.phcfg['exempt_addresses']:
+			for addr in self.phcfg['exempt_addresses'].split(' '):
+				try:
+					netobj = ipaddress.ip_network(addr)
+					self.exempt_addresses.append(netobj)
+				except:
+					pass
 
 		handler = lambda self=self : self.eventloop.create_task(self.sigterm_handler())
 		self.eventloop.add_signal_handler(signal.SIGTERM, handler)
@@ -185,10 +194,12 @@ class Client(configpydle.Client):
 		# Always validate and canonicalise addresses
 		ipaddr = matches.group(1)
 		try:
-			ipobj = ip_address(ipaddr)
+			ipobj = ipaddress.ip_address(ipaddr)
 			if ipobj.version != 4 and ipobj.version != 6:
 				raise ValueError('Unknown IP version')
 			if not ipobj.is_global:
+				return
+			if True in [ipobj in netobj for netobj in self.exempt_addresses]:
 				return
 			ipaddr = ipobj.compressed
 		except ValueError as e:
@@ -251,7 +262,7 @@ class Client(configpydle.Client):
 				# Always validate and canonicalise addresses
 				ipaddr = result.attrib['ip']
 				try:
-					ipobj = ip_address(ipaddr)
+					ipobj = ipaddress.ip_address(ipaddr)
 					if ipobj.version != 4 and ipobj.version != 6:
 						raise ValueError('Unknown IP version')
 					ipaddr = ipobj.compressed
@@ -472,6 +483,7 @@ def main():
 		'dronebl_endpoint':     'https://dronebl.org/rpc2',
 		'dronebl_interval':     '3600',
 		'dronebl_timeout':      '120',
+		'exempt_addresses':     '',
 	}
 
 	required_config_keys = [
