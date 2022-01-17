@@ -15,11 +15,9 @@ public key, and we limit our key exchange algorithms to [NTRU](https://en.wikipe
 [Curve25519](https://en.wikipedia.org/wiki/Curve25519). In our experience, not a single abusive SSH bot/worm is
 currently (as of writing) capable of negotiating an SSH session with these parameters.
 
-Therefore, this script only reacts to SSH host key algorithm and key exchange algorithm mismatch messages. If you
-wish to deploy this in your own setup, and that setup is far more permissive with regards to compatible clients, you
-will need to change the regexp in the script, to detect, for example, invalid usernames. You will also need to have
-your system log in an IRC channel because this script expects that. We have our system logs in an IRC channel so that
-we actually pay attention to the log messages.
+You will need to have your system log in an IRC channel because this script expects that. We have our system logs in
+an IRC channel so that we actually pay attention to the log messages. You may also need to adjust the "startswith"
+line in the source code depending upon the nicknames of your system logging bots.
 
 ---
 

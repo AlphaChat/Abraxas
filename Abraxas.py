@@ -48,9 +48,11 @@ class Client(configpydle.Client):
 		self.re_dronebl_comment = re.compile('^SSH server abuse\. First seen (.+)\. Last seen (.+)\. ' \
 		                                     'Observed ([0-9]+) times\.$')
 
-		self.re_sshd_message    = re.compile('^\x03[0-9]{1,2}\[sshd\] Unable to negotiate with (.+): ' \
-		                                     'no matching (key exchange method|host key type) found ' \
-		                                     '\[preauth\]\x03$')
+		self.re_sshd_message    = re.compile('^\x03[0-9]{1,2}\[sshd\] (?:Invalid user [^ ]+ from ([^ ]+) '
+		                                     'port [0-9]+|drop connection \#[0-9]+ from \[([^]]+)\]:[0-9]+ '
+		                                     'on \[[^]]+\]:[0-9]+ past MaxStartups|Unable to negotiate with '
+		                                     '([^ ]+): no matching (?:key exchange method|host key type) '
+		                                     'found \[preauth\])\x03$')
 
 		self.ev_tasks           = None
 		self.exempt_addresses   = []
@@ -187,12 +189,18 @@ class Client(configpydle.Client):
 		if not source.startswith('irccat-'):
 			return
 
+		ipaddr = None
 		matches = self.re_sshd_message.fullmatch(message)
 		if not matches:
 			return
+		for result in matches.groups():
+			if result:
+				ipaddr = result
+				break
+		if not ipaddr:
+			return
 
 		# Always validate and canonicalise addresses
-		ipaddr = matches.group(1)
 		try:
 			ipobj = ipaddress.ip_address(ipaddr)
 			if ipobj.version != 4 and ipobj.version != 6:
