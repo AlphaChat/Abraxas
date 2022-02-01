@@ -236,9 +236,9 @@ class Client(configpydle.Client):
 		if not len(self.ipaddrinfo):
 			return
 
-		try:
-			dronebl_id_to_ip = {}
+		dronebl_id_to_ip = {}
 
+		try:
 			if self.http_session is None:
 				headers = { 'Content-Type': 'text/xml' }
 				timeout = aiohttp.ClientTimeout(total=self.phcfg['dronebl_timeout'])
@@ -256,6 +256,8 @@ class Client(configpydle.Client):
 			data = self.make_dronebl_lookup()
 			async with self.http_session.post(self.phcfg['dronebl_endpoint'], data=data) as response:
 				text = await response.text()
+				if not text:
+					raise ValueError('RPC endpoint did not respond with any data')
 				root = ET.XML(text)
 				await self.validate_response(root)
 
@@ -324,6 +326,11 @@ class Client(configpydle.Client):
 				except:
 					pass
 
+		except Exception as e:
+			return await self.log_message(f'{func_name}: Exception while performing RPC query: ' \
+			                              f'{type(e)} {str(e)}')
+
+		try:
 			# Perform the additions and updates required for addresses that have crossed the threshold
 			root = None
 			data = self.make_dronebl_update()
@@ -331,6 +338,8 @@ class Client(configpydle.Client):
 				return
 			async with self.http_session.post(self.phcfg['dronebl_endpoint'], data=data) as response:
 				text = await response.text()
+				if not text:
+					raise ValueError('RPC endpoint did not respond with any data')
 				root = ET.XML(text)
 				await self.validate_response(root)
 
@@ -382,7 +391,8 @@ class Client(configpydle.Client):
 				del self.ipaddrinfo[ipaddr]
 
 		except Exception as e:
-			return await self.log_message(f'{func_name}: Exception {type(e)}: {str(e)}')
+			return await self.log_message(f'{func_name}: Exception while performing RPC update: ' \
+			                              f'{type(e)} {str(e)}')
 
 
 
