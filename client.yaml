@@ -1,0 +1,167 @@
+# IRC server connection details
+#
+hostname:               'irc.alphachat.net'
+tls_client_cert:        'client.crt'
+tls_client_cert_key:    'client.key'
+password:               'redacted'
+username:               'abraxas'
+realname:               'AlphaChat Network Security Service'
+nickname:               'Abraxas'
+connect_modes:          '+QRgi-x'
+away_message:           'I am a robot; your messages will be forever ignored.'
+
+
+# The channel that abuse events are recorded to
+#
+abuse_channel:          '#ssyslog'
+
+
+# Optional:  The nickname prefix required on abuse messages.  Messages in the abuse_channel not from
+# nicknames that begin with this prefix will be ignored, even if they match abuse_pattern.  If absent,
+# does not care about nicknames.  Defaults to absent.
+#
+abuse_nick_prefix:      'irccat-'
+
+
+# The regular expression for abuse events.
+# This MUST have a named capture group called "address" which contains the abusive IP address.
+#
+abuse_pattern:          '^\x03[0-9][0-9]\[sshd-session\] Disconnected from (?:authenticating|invalid) user [^ ]* (?P<address>[^ ]+) \(.*?\) \[preauth\]\x03$'
+
+
+# Optional:  The amount of time to wait between batch submissions within the same interval.  Note that a
+# low batch limit and a high delay may mean missing some submission intervals.  For example, if the
+# interval is set to 5 minutes, you have 100 addresses to submit additions and/or updates for, the batch
+# limit is 10, and the batch delay is 30, then it will take at least 300 seconds just to process the
+# batches, meaning the next submission interval would occur after 10 minutes, not 5.  Has no effect if the
+# batch limit is 0 or absent.
+#
+# Valid values are 0, or between 5 and 60 (inclusive).  Defaults to 0.
+#
+batch_delay:            10
+
+
+# Optional:  The number of addresses to limit batch submissions to.  If this is specified, additions and
+# updates will be limited to this number of addresses, before waiting for the batch delay to submit the
+# next batch.
+#
+# Valid values are 0, or between 5 and 250 (inclusive).  Defaults to 0.
+#
+batch_limit:            50
+
+
+# The Python format string equivalent to comment_pattern, used to set the comment on submissions.
+# This MUST result in output that would match the regular expression in comment_pattern below and
+# MUST include the same groups as documented for it.
+#
+comment_format:         'Attempted unauthorised logins to our SSH servers detected from this IP address; likely infected with malware. First seen {first_seen}. Last seen {last_seen}. Observed {event_count} times.'
+
+
+# The regular expression for parsing DroneBL comments.
+#
+# This must have named capture groups called "first_seen", "last_seen", and "event_count", which contain,
+# respectively, the ISO 8601 timestamp of the first time the abuse was detected, the ISO 8601 timestamp of
+# the last time the abuse was detected, and the total amount of abuse events detected.
+#
+# This MUST match any and all existing listings you may have; i.e. DO NOT modify it after running this
+# software.
+#
+comment_pattern:        '^Attempted unauthorised logins to our SSH servers detected from this IP address; likely infected with malware\. First seen (?P<first_seen>.+)\. Last seen (?P<last_seen>.+)\. Observed (?P<event_count>[0-9]+) times\.$'
+
+
+# Optional:  The URL of the DroneBL RPC API.  Defaults to 'https://dronebl.org/rpc2'.
+#
+endpoint:               'https://dronebl.org/rpc2'
+
+
+# Optional:  How often to submit listing additions and modifications.  The submission task occurs at times
+# that are modulo zero this interval.  For example, with value 300 (5 minutes), the task would run at
+# 00:00:00, and then at 00:05:00, and then at 00:10:00
+#
+# Valid values are 300 to 3600 (inclusive).  Defaults to 900.
+#
+interval:               900
+
+
+# Optional:  How much to shift the interval by each time.  Following along from the example above, if this
+# were set to 30, then the task would instead run at 00:00:30, and then at 00:05:30, and then at 00:10:30
+#
+# Valid values are 0 to 120 (inclusive).  Defaults to 0.
+#
+interval_shift:         80
+
+
+# Optional:  Message log level.  Valid values:
+#
+#   0 - Log nothing but exceptions
+#
+#   1 - Log a summary of how many IP addresses were added, updated, and removed
+#
+#   2 - Log which IP addresses were added, updated, and removed
+#       For added and updated addresses, log their current abuse event counts
+#
+#   3 - As for 2, but also log every time abuse_pattern matches a message,
+#       logging the IP address parsed from the message using the pattern
+#
+# Defaults to 1.
+#
+log_level:              1
+
+
+# Optional:  The URL of a proxy to use to talk to the DroneBL RPC API.  Useful if this machine has an
+# outbound firewall that does not permit the user to connect to the RPC API directly.  Any URL scheme
+# supported by aiohttp can be used.  A direct connection will be used if this value is absent or "None".
+# Defaults to absent.
+#
+proxy_url:              'https://bastion.alphachat.net:843'
+
+
+# Optional:  The message colour to put on messages we send to the abuse channel
+#
+message_colour:         12
+
+
+# Optional:  The amount of times an address can be rejected for submission by DroneBL before this script
+# stops trying to submit it and forgets about the abuse events from it (first seen timestamp, etc).
+#
+# Valid values are between 0 and 250 (inclusive).  A value of 0 means to immediately forget about any
+# address that is rejected.  Defaults to 0.
+#
+reject_count:           32
+
+
+# The DroneBL RPC API key
+#
+rpc_key:                'redacted'
+
+
+# Optional:  Whether to run in "staging" mode.  This doesn't actually add/update listings, it just reports
+# that they were.  Useful for testing; for example, to confirm that your abuse_pattern is detecting abuse
+# events, and that your RPC key is valid.  If absent or False, will actually submit.  Defaults to False.
+#
+staging:                False
+
+
+# Optional:  How many abuse events to require from an IP address before it is submitted.
+#
+# Valid values are between 3 and 100 (inclusive).  Defaults to 10.
+#
+threshold:              15
+
+
+# Optional:  The amount of time in which a submission must complete and the server must respond.
+#
+# Valid values are 60 to 240 (inclusive).  Defaults to 240.
+#
+timeout:                240
+
+
+# Optional:  IP addresses and network blocks to ignore abuse events for.  Note that IP addresses will not
+# be submitted (even if they match the abuse pattern and cross the event count threshold) if they are not
+# global-scope IP addresses.  For example, localhost, RFC 1918 addresses, and RFC 4193 addresses will never
+# be submitted; so although you could specify such address blocks here, there is no need to.  If not
+# specified, defaults to an empty list.
+#
+exempt_netblocks:
+- '192.0.2.0/24'
+- '2001:db8::/32'
